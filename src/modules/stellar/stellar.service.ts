@@ -159,6 +159,206 @@ export class StellarService {
   }
 
   /**
+   * Calls EphemeralAccount.record_payment() on the Soroban contract.
+   *
+   * Should be called when an inbound payment is detected on the ephemeral
+   * account's Stellar address (via Horizon payment stream — see Issue #9).
+   *
+   * Contract error mapping:
+   * - Error::InvalidAmount     → throws — payment amount must be positive
+   * - Error::DuplicateAsset    → throws — that asset already recorded, not retryable
+   * - Error::TooManyPayments   → throws — 10 asset limit reached, not retryable
+   * - Error::NotInitialized    → throws — contract not initialized, system error
+   */
+  async recordPayment(params: {
+    contractId: string;
+    amount: bigint; // i128 in contract — use bigint to avoid precision loss
+    assetAddress: string; // Stellar contract address of the asset
+    signerSecret: string;
+  }): Promise<void> {
+    const signerKeypair = StellarSdk.Keypair.fromSecret(params.signerSecret);
+    const contract = new StellarSdk.Contract(params.contractId);
+    const sourceAccount = await this.sorobanServer.getAccount(
+      signerKeypair.publicKey(),
+    );
+
+    const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.getNetworkPassphrase(),
+    })
+      .addOperation(
+        contract.call(
+          'record_payment',
+          StellarSdk.xdr.ScVal.scvI128(
+            new StellarSdk.xdr.Int128Parts({
+              hi: StellarSdk.xdr.Int64.fromString(
+                (params.amount >> 64n).toString(),
+              ),
+              lo: StellarSdk.xdr.Uint64.fromString(
+                (params.amount & 0xffffffffffffffffn).toString(),
+              ),
+            }),
+          ),
+          StellarSdk.Address.fromString(params.assetAddress).toScVal(),
+        ),
+      )
+      .setTimeout(30)
+      .build();
+
+    const preparedTx = await this.sorobanServer.prepareTransaction(transaction);
+    preparedTx.sign(signerKeypair);
+
+    const result = await this.sorobanServer.sendTransaction(preparedTx);
+
+    if (result.status === 'ERROR') {
+      this.logger.error(
+        `record_payment failed for contract ${params.contractId}: ${JSON.stringify(result.errorResult)}`,
+      );
+      throw new Error(
+        `record_payment failed: ${JSON.stringify(result.errorResult ?? 'unknown')}`,
+      );
+    }
+
+    await this.waitForTransaction(result.hash);
+    this.logger.log(
+      `Payment recorded on contract ${params.contractId}, amount: ${params.amount}`,
+    );
+  }
+
+  /**
+   * Calls SweepController.execute_sweep() to transfer funds from an ephemeral
+   * account to the recipient's permanent wallet.
+   *
+   * The SweepController internally calls EphemeralAccount.sweep() which
+   * validates state and updates the account status on-chain.
+   *
+   * ⚠️ MVP Note: The contract updates state and emits events but does NOT yet
+   * execute token transfers on-chain. Actual fund movement is not implemented
+   * in bridgelet-core at this stage. See bridgelet-core known limitations.
+   *
+   * Contract error mapping:
+   * - Error::AlreadySwept          → terminal, do not retry
+   * - Error::AccountExpired        → terminal, trigger expiry flow instead
+   * - Error::UnauthorizedDestination → destination doesn't match locked mode config
+   * - Error::AuthorizationFailed   → signature invalid
+   */
+  async executeSweep(params: {
+    sweepControllerContractId: string;
+    ephemeralAccountContractId: string;
+    destination: string;
+    authSignature: Buffer; // 64 bytes
+    signerSecret: string;
+  }): Promise<void> {
+    const signerKeypair = StellarSdk.Keypair.fromSecret(params.signerSecret);
+    const contract = new StellarSdk.Contract(params.sweepControllerContractId);
+    const sourceAccount = await this.sorobanServer.getAccount(
+      signerKeypair.publicKey(),
+    );
+
+    const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.getNetworkPassphrase(),
+    })
+      .addOperation(
+        contract.call(
+          'execute_sweep',
+          StellarSdk.Address.fromString(
+            params.ephemeralAccountContractId,
+          ).toScVal(),
+          StellarSdk.Address.fromString(params.destination).toScVal(),
+          StellarSdk.xdr.ScVal.scvBytes(params.authSignature),
+        ),
+      )
+      .setTimeout(30)
+      .build();
+
+    const preparedTx = await this.sorobanServer.prepareTransaction(transaction);
+    preparedTx.sign(signerKeypair);
+
+    const result = await this.sorobanServer.sendTransaction(preparedTx);
+
+    if (result.status === 'ERROR') {
+      const errStr = JSON.stringify(result.errorResult);
+      this.logger.error(
+        `execute_sweep failed for ${params.ephemeralAccountContractId}: ${errStr}`,
+      );
+
+      // Surface terminal errors explicitly so callers don't retry
+      if (errStr.includes('AlreadySwept')) throw new Error('ALREADY_SWEPT');
+      if (errStr.includes('AccountExpired')) throw new Error('ACCOUNT_EXPIRED');
+
+      throw new Error(`execute_sweep failed: ${errStr}`);
+    }
+
+    await this.waitForTransaction(result.hash);
+    this.logger.log(
+      `Sweep executed: ${params.ephemeralAccountContractId} → ${params.destination}`,
+    );
+  }
+
+  /**
+   * Calls EphemeralAccount.expire() to close an unclaimed account after its
+   * expiry ledger has been reached, directing funds to the recovery address.
+   *
+   * Should be called by a scheduled job monitoring accounts whose expiresAt
+   * timestamp has passed. The scheduler is tracked separately (not in scope here).
+   *
+   * ⚠️ MVP Note: Fund recovery to recovery_address depends on token transfer
+   * implementation in the contract, which is not yet complete in bridgelet-core.
+   *
+   * Contract error mapping:
+   * - Error::NotExpired     → non-fatal race condition, ledger not yet reached
+   * - Error::InvalidStatus  → terminal, account already swept or expired
+   * - Error::NotInitialized → system error, contract was never initialized
+   */
+  async expireAccount(params: {
+    contractId: string;
+    signerSecret: string;
+  }): Promise<void> {
+    // Guard: check ledger before calling to avoid unnecessary transactions
+    const currentLedger = await this.getCurrentLedger();
+    const accountInfo = await this.getAccountInfo(params.contractId);
+
+    if (currentLedger < accountInfo.expiry_ledger) {
+      this.logger.warn(
+        `expireAccount called too early for ${params.contractId}. ` +
+          `Current: ${currentLedger}, expiry: ${accountInfo.expiry_ledger}`,
+      );
+      return; // non-fatal, scheduler will retry
+    }
+
+    const signerKeypair = StellarSdk.Keypair.fromSecret(params.signerSecret);
+    const contract = new StellarSdk.Contract(params.contractId);
+    const sourceAccount = await this.sorobanServer.getAccount(
+      signerKeypair.publicKey(),
+    );
+
+    const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.getNetworkPassphrase(),
+    })
+      .addOperation(contract.call('expire'))
+      .setTimeout(30)
+      .build();
+
+    const preparedTx = await this.sorobanServer.prepareTransaction(transaction);
+    preparedTx.sign(signerKeypair);
+
+    const result = await this.sorobanServer.sendTransaction(preparedTx);
+
+    if (result.status === 'ERROR') {
+      const errStr = JSON.stringify(result.errorResult);
+      if (errStr.includes('InvalidStatus')) {
+        throw new Error('ACCOUNT_ALREADY_TERMINAL');
+      }
+      throw new Error(`expire() failed: ${errStr}`);
+    }
+
+    await this.waitForTransaction(result.hash);
+    this.logger.log(`Account expired on-chain: ${params.contractId}`);
+  }
+
+  /**
    * Calls EphemeralAccount.get_info() and returns the full on-chain account state.
    * Used by the sweep and claims modules to verify account readiness before acting,
    * and internally by expireAccount() to check expiry ledger before submitting.
