@@ -359,6 +359,73 @@ export class StellarService {
   }
 
   /**
+   * Calls EphemeralAccount.get_info() and returns the full on-chain account state.
+   * Used by the sweep and claims modules to verify account readiness before acting,
+   * and internally by expireAccount() to check expiry ledger before submitting.
+   */
+  async getAccountInfo(contractId: string): Promise<{
+    status: string;
+    expiry_ledger: number;
+    payment_received: boolean;
+    payment_count: number;
+    recovery_address: string;
+  }> {
+    const contract = new StellarSdk.Contract(contractId);
+
+    // get_info is a read-only call — use simulateTransaction, no signing needed
+    const dummyKeypair = StellarSdk.Keypair.random();
+    const sourceAccount = new StellarSdk.Account(dummyKeypair.publicKey(), '0');
+
+    const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.getNetworkPassphrase(),
+    })
+      .addOperation(contract.call('get_info'))
+      .setTimeout(30)
+      .build();
+
+    const simResult = await this.sorobanServer.simulateTransaction(transaction);
+
+    if (SorobanRpc.Api.isSimulationError(simResult)) {
+      throw new Error(`get_info simulation failed: ${simResult.error}`);
+    }
+
+    // Parse the returned ScVal - shape mirrors AccountInfo struct in bridgelet-core
+    const returnVal = simResult.result?.retval;
+    if (!returnVal)
+      throw new Error(`get_info returned no value for ${contractId}`);
+
+    const mapEntries = returnVal.map();
+    if (!mapEntries) {
+      throw new Error(
+        `get_info returned unexpected ScVal type for ${contractId}`,
+      );
+    }
+
+    const fields = mapEntries.map((entry) => ({
+      key: entry.key().sym().toString(),
+      val: entry.val(),
+    }));
+
+    const get = (key: string) => fields.find((f) => f.key === key)?.val;
+
+    const recoveryVal = get('recovery_address');
+    if (!recoveryVal) {
+      throw new Error(
+        `get_info missing recovery_address field for ${contractId}`,
+      );
+    }
+
+    return {
+      status: get('status')?.u32()?.toString() ?? 'unknown',
+      expiry_ledger: get('expiry_ledger')?.u32() ?? 0,
+      payment_received: get('payment_received')?.b() ?? false,
+      payment_count: get('payment_count')?.u32() ?? 0,
+      recovery_address: StellarSdk.Address.fromScVal(recoveryVal).toString(),
+    };
+  }
+
+  /**
    * Polls Soroban RPC until a transaction is confirmed or fails.
    * Used after sendTransaction() which is async by nature.
    */
@@ -385,18 +452,5 @@ export class StellarService {
     return this.network === 'mainnet'
       ? StellarSdk.Networks.PUBLIC
       : StellarSdk.Networks.TESTNET;
-  }
-
-  /**
-   * TODO: Implement via Issue #109 - reads on-chain account state (expiry_ledger, status, etc.)
-   * from the EphemeralAccount contract using sorobanServer.getContractData().
-   * Tracked in: https://github.com/bridgelet-org/bridgelet-sdk/issues/109
-   * method should be asynchronous
-   */
-  private getAccountInfo(
-    /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
-    contractId: string,
-  ): Promise<{ expiry_ledger: number }> {
-    throw new Error('getAccountInfo() not yet implemented - see Issue #109');
   }
 }
