@@ -4,11 +4,9 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ClaimRedemptionProvider } from './claim-redemption.provider.js';
 import { TokenVerificationProvider } from './token-verification.provider.js';
 import { Claim } from '../entities/claim.entity.js';
-import {
-  Account,
-  AccountStatus,
-} from '../../accounts/entities/account.entity.js';
+import { Account } from '../../accounts/entities/account.entity.js';
 import { SweepsService } from '../../sweeps/sweeps.service.js';
+import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 
 describe('ClaimRedemptionProvider', () => {
   let provider: ClaimRedemptionProvider;

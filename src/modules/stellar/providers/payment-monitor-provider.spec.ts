@@ -2,12 +2,10 @@ import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import {
-  Account,
-  AccountStatus,
-} from '../../../modules/accounts/entities/account.entity.js';
+import { Account } from '../../../modules/accounts/entities/account.entity.js';
 import { PaymentMonitorProvider } from './payment-monitor-provider.js';
 import { StellarService } from '../stellar.service.js';
+import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

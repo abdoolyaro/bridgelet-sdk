@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { AccountStatus } from '../entities/account.entity.js';
+import { AccountStatus } from '../enums/account-status.enum.js';
 
 export class AccountResponseDto {
   @ApiProperty({

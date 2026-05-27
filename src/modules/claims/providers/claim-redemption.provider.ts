@@ -8,13 +8,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Claim } from '../entities/claim.entity.js';
-import {
-  Account,
-  AccountStatus,
-} from '../../accounts/entities/account.entity.js';
+import { Account } from '../../accounts/entities/account.entity.js';
 import { ClaimRedemptionResponseDto } from '../dto/claim-redemption-response.dto.js';
 import { SweepsService } from '../../sweeps/sweeps.service.js';
 import { TokenVerificationProvider } from './token-verification.provider.js';
+import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 
 @Injectable()
 export class ClaimRedemptionProvider {

@@ -2,12 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import {
-  Account,
-  AccountStatus,
-} from '../../accounts/entities/account.entity.js';
+import { Account } from '../../accounts/entities/account.entity.js';
 import { ValidationProvider } from './validation.provider.js';
 import { StrKey } from '@stellar/stellar-sdk';
+import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 
 const mockAccount = (overrides: Partial<Account> = {}): Account =>
   ({

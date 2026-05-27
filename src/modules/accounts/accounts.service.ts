@@ -1,14 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Account, AccountStatus } from './entities/account.entity.js';
+import { Account } from './entities/account.entity.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountResponseDto } from './dto/account-response.dto.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
-import { PaymentMonitorProvider } from '../stellar/providers/payment-monitor-provider.js';
+import { AccountStatus } from './enums/account-status.enum.js';
 
 /**
  * AccountsService — Service-Level Documentation & Contributor Guidance
@@ -88,15 +88,16 @@ import { PaymentMonitorProvider } from '../stellar/providers/payment-monitor-pro
  */
 @Injectable()
 export class AccountsService {
+  private readonly logger = new Logger(AccountsService.name);
+  private readonly ENCRYPTION_KEY: Buffer;
+  private readonly IV_LENGTH = 16;
+  
   constructor(
     @InjectRepository(Account)
     private accountsRepository: Repository<Account>,
     private configService: ConfigService,
     private jwtService: JwtService,
     private stellarService: StellarService,
-    private paymentMonitor: PaymentMonitorProvider,
-    private readonly ENCRYPTION_KEY: Buffer,
-    private readonly IV_LENGTH = 16,
   ) {
     this.ENCRYPTION_KEY = Buffer.from(
       this.configService.getOrThrow<string>('app.encryptionKey'),
@@ -113,18 +114,6 @@ export class AccountsService {
     // Calculate expiry timestamp
     const expiresAt = new Date(Date.now() + createAccountDto.expiresIn * 1000);
 
-    // Create account on Stellar
-    const txHash = await this.stellarService.createEphemeralAccount({
-      publicKey: ephemeralKeypair.publicKey(),
-      amount: createAccountDto.amount,
-      asset: createAccountDto.asset,
-      expiresIn: createAccountDto.expiresIn,
-      recoveryAddress: createAccountDto.fundingSource,
-      contractId: this.configService.getOrThrow<string>(
-        'stellar.ephemeralContractId',
-      ),
-    });
-
     // Generate claim token
     const claimToken = this.generateClaimToken(ephemeralKeypair.publicKey());
 
@@ -134,14 +123,15 @@ export class AccountsService {
       .update(claimToken)
       .digest('hex');
 
-    // Save to database
+    // Save with INITIALIZING status first so we have a DB record for cleanup
+    // if the Stellar/contract steps fail
     const account = this.accountsRepository.create({
       publicKey: ephemeralKeypair.publicKey(),
       secretKeyEncrypted: this.encryptSecret(ephemeralKeypair.secret()),
       fundingSource: createAccountDto.fundingSource,
       amount: createAccountDto.amount,
       asset: createAccountDto.asset,
-      status: AccountStatus.PENDING_PAYMENT,
+      status: AccountStatus.INITIALIZING,
       claimTokenHash,
       expiresAt,
       metadata: createAccountDto.metadata,
@@ -149,23 +139,46 @@ export class AccountsService {
 
     await this.accountsRepository.save(account);
 
-    // Start monitoring for inbound payment on this account's Stellar address.
-    // PaymentMonitorService will call recordPayment() and update status to
-    // PENDING_CLAIM automatically when funds arrive.
-    this.paymentMonitor.watch(account);
+    try {
+      const txHash = await this.stellarService.createEphemeralAccount({
+        publicKey: ephemeralKeypair.publicKey(),
+        amount: createAccountDto.amount,
+        asset: createAccountDto.asset,
+        expiresIn: createAccountDto.expiresIn,
+        recoveryAddress: createAccountDto.fundingSource,
+        contractId: this.configService.getOrThrow<string>(
+          'stellar.ephemeralContractId',
+        ),
+      });
 
-    // Return response
-    return {
-      accountId: account.id,
-      publicKey: account.publicKey,
-      claimUrl: this.generateClaimUrl(claimToken),
-      txHash,
-      amount: account.amount,
-      asset: account.asset,
-      status: account.status,
-      expiresAt: account.expiresAt,
-      createdAt: account.createdAt,
-    };
+      // Both Horizon and contract succeeded — advance to real status
+      account.status = AccountStatus.PENDING_PAYMENT;
+      await this.accountsRepository.save(account);
+
+      return {
+        accountId: account.id,
+        publicKey: account.publicKey,
+        claimUrl: this.generateClaimUrl(claimToken),
+        txHash,
+        amount: account.amount,
+        asset: account.asset,
+        status: account.status,
+        expiresAt: account.expiresAt,
+        createdAt: account.createdAt,
+      };
+    } catch (error: unknown) {
+      // Mark as FAILED so the record is traceable but clearly broken
+      account.status = AccountStatus.FAILED;
+      await this.accountsRepository.save(account);
+
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Account creation failed for ${ephemeralKeypair.publicKey()}: ${message}`,
+      );
+      // preserve original error if it's an Error, otherwise wrap
+      if (error instanceof Error) throw error;
+      throw new Error(message);
+    }
   }
 
   public async findOne(id: string): Promise<AccountResponseDto> {

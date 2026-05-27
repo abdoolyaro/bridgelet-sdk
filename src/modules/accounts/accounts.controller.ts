@@ -19,7 +19,7 @@ import { AccountsService } from './accounts.service.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountResponseDto } from './dto/account-response.dto.js';
 import { AccountsListResponseDto } from './dto/accounts-list-response.dto.js';
-import { AccountStatus } from './entities/account.entity.js';
+import { AccountStatus } from './enums/account-status.enum.js';
 
 @ApiTags('accounts')
 @ApiBearerAuth()

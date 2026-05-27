@@ -6,12 +6,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  Account,
-  AccountStatus,
-} from '../../accounts/entities/account.entity.js';
+import { Account } from '../../accounts/entities/account.entity.js';
 import { StrKey } from '@stellar/stellar-sdk';
 import type { SweepExecutionRequest } from '../interfaces/execute-sweep.interface.js';
+import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 
 @Injectable()
 export class ValidationProvider {

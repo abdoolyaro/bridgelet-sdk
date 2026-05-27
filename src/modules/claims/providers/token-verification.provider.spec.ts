@@ -8,11 +8,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import { TokenVerificationProvider } from './token-verification.provider.js';
-import {
-  Account,
-  AccountStatus,
-} from '../../accounts/entities/account.entity.js';
+import { Account } from '../../accounts/entities/account.entity.js';
 import jwt from 'jsonwebtoken';
+import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 
 // Mock jsonwebtoken to control verify output, but keep actual error classes
 jest.mock('jsonwebtoken', () => {
