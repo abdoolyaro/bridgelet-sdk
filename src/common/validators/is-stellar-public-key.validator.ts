@@ -14,7 +14,9 @@ export function IsStellarPublicKey(options?: ValidationOptions) {
       },
       validator: {
         validate(value: unknown) {
-          return typeof value === 'string' && STELLAR_PUBLIC_KEY_REGEX.test(value);
+          return (
+            typeof value === 'string' && STELLAR_PUBLIC_KEY_REGEX.test(value)
+          );
         },
       },
     });
