@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
 
+export const EXPIRY_BUFFER_LEDGERS = 10;
+
 @Injectable()
 export class StellarService {
   private readonly logger = new Logger(StellarService.name);
@@ -49,8 +51,9 @@ export class StellarService {
    */
   async toExpiryLedger(expiresInSeconds: number): Promise<number> {
     const currentLedger = await this.getCurrentLedger();
-    const buffer = 10;
-    return currentLedger + Math.ceil(expiresInSeconds / 5) + buffer;
+    return (
+      currentLedger + Math.ceil(expiresInSeconds / 5) + EXPIRY_BUFFER_LEDGERS
+    );
   }
 
   generateKeypair(): StellarSdk.Keypair {
