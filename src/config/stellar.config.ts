@@ -1,7 +1,7 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('stellar', () => ({
-  network: process.env.STELLAR_NETWORK || 'testnet',
+  network: getNetwork(),
   horizonUrl:
     process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org',
   sorobanRpcUrl:
@@ -21,3 +21,13 @@ export default registerAs('stellar', () => ({
   encryptionKey: process.env.ENCRYPTION_KEY || '64_char_hex_string_here',
   sweepControllerContractId: process.env.SWEEP_CONTROLLER_CONTRACT_ID,
 }));
+
+function getNetwork(): 'mainnet' | 'testnet' {
+  const network = process.env.STELLAR_NETWORK || 'testnet';
+  if (network !== 'mainnet' && network !== 'testnet') {
+    throw new Error(
+      `Invalid STELLAR_NETWORK "${network}". Expected "mainnet" or "testnet".`,
+    );
+  }
+  return network;
+}

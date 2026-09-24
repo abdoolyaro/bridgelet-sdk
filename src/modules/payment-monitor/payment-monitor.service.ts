@@ -71,9 +71,8 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
-    const intervalMs = parseInt(
-      process.env.PAYMENT_POLL_INTERVAL_MS ?? '30000',
-      10,
+    const intervalMs = this.configService.getOrThrow<number>(
+      'app.paymentPollIntervalMs',
     );
     this.intervalHandle = setInterval(
       () => void this.pollAllAccounts(),

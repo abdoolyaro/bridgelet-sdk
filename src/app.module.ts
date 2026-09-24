@@ -39,10 +39,7 @@ import { CryptoModule } from './common/crypto/crypto.module.js';
     }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
-      {
-        ttl: 60000, // 1 minute
-        limit: parseInt(process.env.API_RATE_LIMIT || '100'),
-      },
+      { ttl: 60000, limit: appConfig().apiRateLimit },
     ]),
     AccountsModule,
     ClaimsModule,

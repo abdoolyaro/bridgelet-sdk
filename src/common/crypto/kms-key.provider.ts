@@ -35,13 +35,13 @@ export class KmsKeyProvider implements OnModuleInit {
   private readonly kmsClient: KMSClient;
 
   constructor(private readonly configService: ConfigService) {
-    this.kmsEnabled = process.env.KMS_ENABLED !== 'false';
-    this.kmsKeyId = process.env.KMS_KEY_ID;
+    this.kmsEnabled = this.configService.getOrThrow<boolean>('app.kmsEnabled');
+    this.kmsKeyId = this.configService.get<string>('app.kmsKeyId');
     this.fallbackKey = this.configService.getOrThrow<string>(
       'stellar.encryptionKey',
     );
     this.kmsClient = new KMSClient({
-      region: process.env.AWS_REGION ?? 'us-east-1',
+      region: this.configService.getOrThrow<string>('app.awsRegion'),
     });
   }
 

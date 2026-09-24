@@ -292,7 +292,7 @@ export class AccountsService {
     // Integration notes:
     // - `CLAIM_BASE_URL` is an environment-level integration point. External
     //   systems and email templates may rely on the shape of this URL.
-    const baseUrl = process.env.CLAIM_BASE_URL || 'https://claim.bridgelet.io';
+    const baseUrl = this.configService.getOrThrow<string>('app.claimBaseUrl');
     return `${baseUrl}/c/${token}`;
   }
 

@@ -4,9 +4,11 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { PinoLoggerService } from './common/logger/pino-logger.service.js';
+import appConfig from './config/app.config.js';
 
 async function bootstrap() {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const config = appConfig();
+  const isProduction = config.env === 'production';
   const logger = isProduction ? new PinoLoggerService() : undefined;
   const app = await NestFactory.create(AppModule, { logger });
 
@@ -19,7 +21,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: process.env.CORS_ORIGINS?.split(',') || '*',
+    origin: config.corsOrigins,
     credentials: true,
   });
 
@@ -32,7 +34,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = process.env.PORT || 3000;
+  const port = config.port;
   void app.listen(port);
 
   const bootstrapLogger = new Logger('Bootstrap');
