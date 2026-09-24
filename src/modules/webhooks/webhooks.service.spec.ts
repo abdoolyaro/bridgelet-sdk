@@ -43,7 +43,10 @@ describe('WebhooksService', () => {
   const mockQb = {
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
     getMany: jest.fn().mockResolvedValue([]),
+    getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
   };
 
   const mockWebhookRepository = {
@@ -115,17 +118,28 @@ describe('WebhooksService', () => {
   // -------------------------------------------------------------------------
 
   describe('findAll()', () => {
-    it('returns only active webhooks mapped to response DTOs', async () => {
+    it('returns only active webhooks as response DTOs, paginated', async () => {
       const webhook = makeWebhook();
-      mockWebhookRepository.find.mockResolvedValue([webhook]);
+      mockQb.getManyAndCount.mockResolvedValue([[webhook], 1]);
 
-      const result = await service.findAll();
+      const result = await service.findAll(50, 0);
 
-      expect(mockWebhookRepository.find).toHaveBeenCalledWith({
-        where: { isActive: true },
+      expect(mockQb.where).toHaveBeenCalledWith(
+        'webhook.isActive = :isActive',
+        { isActive: true },
+      );
+      expect(mockQb.skip).toHaveBeenCalledWith(0);
+      expect(mockQb.take).toHaveBeenCalledWith(50);
+      expect(result.total).toBe(1);
+      expect(result.webhooks[0]).toMatchObject({
+        id: webhook.id,
+        url: webhook.url,
       });
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ id: webhook.id, url: webhook.url });
+    });
+
+    it('caps limit at 100', async () => {
+      await service.findAll(500, 0);
+      expect(mockQb.take).toHaveBeenCalledWith(100);
     });
   });
 

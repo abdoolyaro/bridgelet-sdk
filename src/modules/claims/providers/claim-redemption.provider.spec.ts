@@ -243,6 +243,19 @@ describe('ClaimRedemptionProvider', () => {
       await p.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
       expect(ds.transaction).toHaveBeenCalledTimes(2);
     });
+
+    it('fires sweep.completed exactly once (issue #632)', async () => {
+      await provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
+
+      const completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      expect(completedCalls).toHaveLength(1);
+      expect(mockWebhooksService.triggerEvent).not.toHaveBeenCalledWith(
+        'sweep.failed',
+        expect.anything(),
+      );
+    });
   });
 
   // Issue #641: sweep.completed/sweep.failed must each fire exactly once,
@@ -406,6 +419,23 @@ describe('ClaimRedemptionProvider', () => {
       await expect(
         p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
       ).rejects.toThrow('Stellar network error');
+    });
+
+    it('fires the sweep.failed webhook exactly once (issue #632)', async () => {
+      const ds = makeHappyPathDataSource();
+      const p = await buildModule(ds);
+      mockSweepsService.executeSweep.mockRejectedValue(
+        new Error('Stellar network error'),
+      );
+
+      await expect(
+        p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow();
+
+      const failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(failedCalls).toHaveLength(1);
     });
   });
 

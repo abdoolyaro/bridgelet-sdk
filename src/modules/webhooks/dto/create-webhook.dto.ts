@@ -7,10 +7,12 @@ import {
   Matches,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsSafeWebhookUrl } from '../../../common/validators/safe-webhook-url.validator.js';
 
 export class CreateWebhookDto {
   @ApiProperty({ example: 'https://api.example.com/hooks' })
   @IsUrl({ require_tld: false })
+  @IsSafeWebhookUrl()
   url: string;
 
   @ApiProperty({

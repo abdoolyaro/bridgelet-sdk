@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -14,6 +15,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
@@ -47,14 +49,23 @@ export class WebhooksController {
 
   @Get()
   @ApiOperation({ summary: 'List registered webhook endpoints' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Max 100, default 50',
+  })
+  @ApiQuery({ name: 'offset', required: false, description: 'Records to skip' })
   @ApiResponse({
     status: 200,
     description: 'Active webhooks',
     type: [WebhookResponseDto],
   })
   @ApiResponse({ status: 401, description: 'Authentication required' })
-  public async findAll(): Promise<WebhookResponseDto[]> {
-    return this.webhooksService.findAll();
+  public async findAll(
+    @Query('limit') limit = 50,
+    @Query('offset') offset = 0,
+  ): Promise<{ webhooks: WebhookResponseDto[]; total: number }> {
+    return this.webhooksService.findAll(limit, offset);
   }
 
   @Put(':id')
