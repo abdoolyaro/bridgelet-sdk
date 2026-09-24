@@ -93,6 +93,52 @@ Settings are passed to the underlying `pg` Pool constructor via the TypeORM `ext
 | ----------------------- | ---------- | ----------------------------------- |
 | `IDX_webhooks_isActive` | `isActive` | Filter active webhook subscriptions |
 
+### contract_events
+
+| Index name                                             | Columns                               | Query served                                                         |
+| ------------------------------------------------------ | ------------------------------------- | -------------------------------------------------------------------- |
+| `IDX_contract_events_contract_address_ledger_sequence` | `contract_address`, `ledger_sequence` | Events for one contract, ordered by ledger (backward scan = no sort) |
+| `IDX_contract_events_event_type_ledger_sequence`       | `event_type`, `ledger_sequence`       | Per-event-type feed over a ledger range                              |
+| `IDX_contract_events_ledger_sequence`                  | `ledger_sequence`                     | Ingestion checkpointing, cross-contract ledger range scans           |
+| `IDX_contract_events_tx_hash`                          | `tx_hash`                             | Correlate an event back to the transaction that produced it          |
+
+Added by migration `1718100009000`. Before it, the table had only its primary
+key on `id`, so every lookup that was not by `id` sequential-scanned an
+append-only table (#653).
+
+**These are provisional.** No code queries `contract_events` yet, so the index
+set follows the documented access patterns rather than an `EXPLAIN ANALYZE` of
+real queries. Re-validate once a consumer lands and drop whichever index earns
+nothing — an unused index on an insert-heavy table is pure write amplification.
+`IDX_contract_events_tx_hash` is the first to drop if ingestion throughput
+becomes the constraint, since it serves human lookups rather than a hot path.
+
+No separate single-column index on `contract_address` or `event_type` is needed:
+both composites can be used as left-prefix scans for their leading column.
+
+### contract_events retention and partitioning
+
+`contract_events` is append-only and unbounded — nothing deletes from it, so it
+grows for as long as the contract emits events. Indexes keep reads fast but do
+nothing about size, and a growing table makes both `VACUUM` and index
+maintenance progressively more expensive. Plan for this before the table gets
+large rather than after:
+
+1. **Retention first.** Decide how far back events must be queryable. If the
+   table is a cache of on-chain data, old rows are re-derivable from Horizon or
+   the Soroban RPC and do not need to live here forever. A scheduled delete by
+   `ledger_sequence` (not `created_at` — ledger sequence is the authoritative
+   ordering) is the simplest effective step, and `SchedulerModule` already hosts
+   comparable cleanup jobs.
+2. **Then partitioning, if retention is not enough.** Declarative range
+   partitioning on `ledger_sequence` turns retention into `DROP TABLE` on an old
+   partition instead of a bulk `DELETE` plus `VACUUM`, and lets PostgreSQL prune
+   whole partitions for ledger-ranged queries. Note the trade: partitioning
+   requires the partition key in the primary key, so `id` alone can no longer be
+   the PK — that is a breaking migration and is why it is step 2, not step 1.
+3. **Archive before either**, if events are needed for audit beyond the
+   retention window: copy to object storage keyed by ledger range, then prune.
+
 ### Index design notes (EXPLAIN ANALYZE audit)
 
 - The **composite indexes on `accounts`** use `status` as the leading column because it is a low-cardinality enum (7 values) that prunes the candidate set effectively before the timestamp column filters further. PostgreSQL can also use `IDX_accounts_status_expiresAt` and `IDX_accounts_status_createdAt` as left-prefix scans for status-only queries.
