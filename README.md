@@ -4,7 +4,6 @@
 
 **MVP Stubs**
 
-> 🚧 **MVP — Active Development:** encryptSecret() — base64, not real encryption, must be replaced before any production deployment
 > 🚧 **The expiresIn → expiry_ledger conversion** — needs verification or explicit documentation of where it happens
 > 🚧 **Webhook coverage gaps**
 
@@ -36,18 +35,12 @@ The following services/imports are currently **commented out** to allow `npm run
 
 1. Search the codebase for comments containing `TEMPORARY:` to locate all commented-out code that needs restoration..
 
-2. **Secret Encryption** (`src/modules/accounts/accounts.service.ts`)
-   - **Current:** Base64 encoding (NOT encryption)
-   - **Impact:** Ephemeral secret keys are not protected at rest
-   - **Required:** AES-256-GCM or KMS-backed encryption before any deployment
-     with real funds
-
-3. **Ledger Expiry Conversion**
+2. **Ledger Expiry Conversion**
    - `CreateAccountDto.expiresIn` (seconds) is not yet converted to
      `expiry_ledger` (u32 ledger sequence) required by the contract
    - `expiresAt` Date is currently unused in `StellarService`
    - Conversion formula: `current_ledger + (expiresIn / 5)`
-4. **Sweep Authorization Signature** (`src/modules/sweeps/providers/contract.provider.ts`)
+3. **Sweep Authorization Signature** (`src/modules/sweeps/providers/contract.provider.ts`)
    - **Current:** `generateAuthSignature()` produces a fake 64-byte stub signature
    - **Works because:** `EphemeralAccount.verify_sweep_authorization()` in `bridgelet-core`
      is also a stub that accepts any signature (documented in bridgelet-core README)
@@ -61,6 +54,10 @@ The following services/imports are currently **commented out** to allow `npm run
 This is a **temporary stabilization** to enable local development and onboarding until missing implementations are complete. **No code was deleted** - all logic remains in place as comments.
 
 ---
+
+## Security
+
+Ephemeral Stellar secret keys are encrypted at rest with AES-256-GCM (KMS-backed envelope encryption in production). See [SECURITY.md](SECURITY.md) for the full encryption, key-management, and legacy-data-migration details.
 
 ## Tech Stack
 
