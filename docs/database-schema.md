@@ -14,7 +14,32 @@ The current schema is created entirely through the migrations in `src/database/m
 
 `account_status_enum` currently contains these values, in order:
 
-`initializing`, `pending_payment`, `pending_claim`, `claiming`, `claimed`, `expired`, `failed`
+`initializing`, `pending_payment`, `pending_claim`, `claiming`, `partial_sweep`, `claimed`, `expired`, `failed`
+
+### Account Status Lifecycle (issue #639)
+
+State transitions driven by `AccountsService`, `ClaimRedemptionProvider`,
+and `SchedulerService`:
+
+```
+INITIALIZING --> PENDING_PAYMENT --> PENDING_CLAIM --> CLAIMING --> CLAIMED
+                       |                                  |
+                       v                                  v
+                    EXPIRED                          PARTIAL_SWEEP
+                       ^                              |         |
+                       |                              v         v
+                 (unclaimed timeout)        (retry, skipContractAuth) CLAIMING
+                                                       |
+                                                       v
+                                                    FAILED
+```
+
+- `INITIALIZING` → `PENDING_PAYMENT`: funding transaction submitted.
+- `PENDING_PAYMENT` / `PENDING_CLAIM` → `EXPIRED`: scheduler expiry job, unclaimed past `expiresAt`.
+- `PENDING_CLAIM` / `PARTIAL_SWEEP` → `CLAIMING`: claim redemption acquires the row lock (`ClaimRedemptionProvider.redeemClaim`).
+- `CLAIMING` → `CLAIMED`: sweep + Horizon payment both succeed.
+- `CLAIMING` → `PARTIAL_SWEEP`: contract authorized but the Horizon payment failed; retried with `skipContractAuth=true`.
+- `CLAIMING` → `PENDING_CLAIM` / `PARTIAL_SWEEP` (rollback) → `FAILED`: unrecoverable sweep error on retry.
 
 ## Connection Pool Configuration
 

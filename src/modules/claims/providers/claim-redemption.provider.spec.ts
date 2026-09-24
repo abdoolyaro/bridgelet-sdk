@@ -245,6 +245,42 @@ describe('ClaimRedemptionProvider', () => {
     });
   });
 
+  // Issue #641: sweep.completed/sweep.failed must each fire exactly once,
+  // and never both, for a single redemption.
+  describe('redeemClaim - webhook exactly-once guarantees (issue #641)', () => {
+    it('fires sweep.completed exactly once and never sweep.failed on success', async () => {
+      await provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
+
+      const completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      const failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(completedCalls).toHaveLength(1);
+      expect(failedCalls).toHaveLength(0);
+    });
+
+    it('fires sweep.failed exactly once and never sweep.completed when the sweep throws', async () => {
+      const ds = makeHappyPathDataSource();
+      const p = await buildModule(ds);
+      mockSweepsService.executeSweep.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow('boom');
+
+      const completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      const failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(failedCalls).toHaveLength(1);
+      expect(completedCalls).toHaveLength(0);
+    });
+  });
+
   describe('redeemClaim - idempotency for already-claimed accounts', () => {
     it('should return idempotent response when SELECT FOR UPDATE finds CLAIMED account', async () => {
       const claimedAccount = { ...mockAccount, status: AccountStatus.CLAIMED };
