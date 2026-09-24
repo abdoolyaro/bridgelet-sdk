@@ -82,3 +82,14 @@ Settings are passed to the underlying `pg` Pool constructor via the TypeORM `ext
 2. The `claims.accountId` and `webhook_deliveries.subscription_id` foreign keys are enforced (inserts with orphan UUIDs are rejected).
 3. The three high-traffic composite/standalone indexes exist after migration `1718100006000`.
 4. The `contract_events` table exists with the expected columns and accepts inserts after migration `1718100007000`.
+
+## Foreign Key Cascade Behavior
+
+`claims.accountId` references `accounts.id` with `onDelete: 'CASCADE'`
+(`FK_claims_accountId`, set in `1718100001000-CreateClaimsTable` and mirrored
+in `src/modules/claims/entities/claim.entity.ts`). This is intentional and
+does **not** interact with `accounts` soft-delete: `deletedAt` only sets a
+flag and never removes the `accounts` row, so soft-deleting an account never
+triggers this FK and existing claims remain intact and queryable. `CASCADE`
+only fires on an actual (hard) `DELETE` of an `accounts` row, at which point
+its claim records are removed with it rather than being orphaned.
