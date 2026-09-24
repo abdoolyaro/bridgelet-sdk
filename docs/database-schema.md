@@ -47,18 +47,18 @@ TypeORM is configured with the following pool settings in both
 `src/config/database.config.ts` (NestJS runtime) and
 `src/config/typeorm.config.ts` (migration CLI):
 
-| Setting                | Value | Rationale                                                                                                                                                    |
-| ---------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `min`                  | 2     | Keeps two warm connections alive to avoid TCP + TLS + PostgreSQL auth latency on the first request after an idle period.                                     |
-| `max`                  | 10    | Caps per-instance connections to leave room for other services sharing the PostgreSQL server. Aligns with a conservative PgBouncer transaction-mode default. |
-| `acquireTimeoutMillis` | 3000  | Fail-fast: surface an error after 3 s if no connection becomes available rather than queuing silently, which would mask connection leaks.                    |
+| Setting                   | Value | Rationale                                                                                                                                                                |
+| ------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `min`                     | 2     | Does not eagerly open connections at startup — `pg-pool` only uses `min` as a floor below which idle connections won't be closed once they already exist.                |
+| `max`                     | 10    | Caps per-instance connections to leave room for other services sharing the PostgreSQL server. See `docs/deployment.md` for sizing guidance against expected concurrency. |
+| `connectionTimeoutMillis` | 3000  | Fail-fast: a caller queued behind a saturated pool gets an error after 3s instead of hanging indefinitely (see `docs/deployment.md`, issue #516).                        |
 
 Settings are passed to the underlying `pg` Pool constructor via the TypeORM `extra` key.
 
 ## Pool Health Check
 
 `GET /health` performs a live pool probe: it races a `SELECT 1` against the
-`acquireTimeoutMillis` (3 000 ms) timeout and reports one of three states:
+`connectionTimeoutMillis` (3 000 ms) timeout and reports one of three states:
 
 | `services.database.healthy` | `services.database.poolExhausted` | Meaning                                                         |
 | --------------------------- | --------------------------------- | --------------------------------------------------------------- |
