@@ -56,6 +56,14 @@ export class WebhooksService {
       webhook.description = dto.description;
     }
 
+    if (dto.isActive !== undefined) {
+      webhook.isActive = dto.isActive;
+    }
+
+    if (dto.secret !== undefined) {
+      webhook.secret = dto.secret;
+    }
+
     const updatedWebhook = await this.webhookRepository.save(webhook);
 
     return this.toResponseDto(updatedWebhook);

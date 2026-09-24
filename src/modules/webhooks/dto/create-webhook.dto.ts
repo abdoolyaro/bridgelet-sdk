@@ -1,4 +1,11 @@
-import { IsUrl, IsArray, IsString, IsOptional } from 'class-validator';
+import {
+  IsUrl,
+  IsArray,
+  IsString,
+  IsOptional,
+  MinLength,
+  Matches,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateWebhookDto {
@@ -27,6 +34,10 @@ export class CreateWebhookDto {
   })
   @IsOptional()
   @IsString()
+  @MinLength(16, { message: 'secret must be at least 16 characters long' })
+  @Matches(/^[A-Za-z0-9_-]+$/, {
+    message: 'secret may only contain letters, numbers, "_" and "-"',
+  })
   secret?: string;
 
   @ApiProperty({ required: false, example: 'Payroll completion hook' })
