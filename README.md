@@ -305,7 +305,7 @@ See [Deployment Guide](./docs/deployment.md) for production setup.
 
 Visit http://localhost:3000/api/docs for API documentation.
 
-See [Getting Started Guide](../docs/getting-started.pdf) for full setup instructions.
+See [Getting Started Guide](./docs/getting-started.md) for full setup instructions.
 
 ## Support
 
