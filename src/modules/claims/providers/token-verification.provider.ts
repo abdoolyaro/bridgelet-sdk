@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
@@ -43,9 +43,12 @@ export class TokenVerificationProvider {
       // Hash the token to look up the associated account
       const tokenHash = this.hashToken(token);
 
-      // Find the account by token hash
+      // Find the account by token hash. deletedAt: IsNull() is explicit
+      // here (issue #435 audit) even though @DeleteDateColumn already
+      // excludes soft-deleted rows, so a soft-deleted account's claim
+      // token can never verify.
       const account = await this.accountRepository.findOne({
-        where: { claimTokenHash: tokenHash },
+        where: { claimTokenHash: tokenHash, deletedAt: IsNull() },
       });
 
       if (!account) {

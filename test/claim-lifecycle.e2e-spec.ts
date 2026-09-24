@@ -265,6 +265,37 @@ describe('Claim lifecycle (e2e) [issue #171]', () => {
     });
   });
 
+  describe('Soft-deleted account (issue #435)', () => {
+    // Note: this suite overrides TokenVerificationProvider with a mock that
+    // never touches the database, so /claims/verify can't exercise the real
+    // deletedAt filter here (that's covered by
+    // token-verification.provider.spec.ts). /claims/redeem is still a valid,
+    // end-to-end proof: its account lookup for the pessimistic-lock claim
+    // slot (ClaimRedemptionProvider.redeemClaim) is real, unmocked, and
+    // hits the actual Postgres instance.
+    it('POST /claims/redeem rejects a token whose account has been soft-deleted, and does not sweep', async () => {
+      const accountRepo = ds!.getRepository(Account);
+      const account = await accountRepo.findOneByOrFail({});
+      await accountRepo.softDelete(account.id);
+
+      const res = await request(getHttpServer()).post('/claims/redeem').send({
+        claimToken: SEED_TOKEN,
+        destinationAddress: VALID_DESTINATION,
+      });
+
+      // Rejected by the pessimistic-lock lookup's `deletedAt IS NULL`
+      // clause in ClaimRedemptionProvider ("Invalid or expired claim
+      // token" -> BadRequestException).
+      expect(res.status).toBe(400);
+
+      // No claim record should have been created for the soft-deleted account.
+      const claimCount = await ds!.getRepository(Claim).count({
+        where: { accountId: account.id },
+      });
+      expect(claimCount).toBe(0);
+    });
+  });
+
   describe('DTO validation', () => {
     it('rejects a non-Stellar destination address with 400', async () => {
       const res = await request(getHttpServer()).post('/claims/redeem').send({

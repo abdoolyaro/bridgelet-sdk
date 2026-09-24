@@ -5,7 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { IsNull, Repository, DataSource, EntityManager } from 'typeorm';
 import * as crypto from 'crypto';
 import { Claim } from '../entities/claim.entity.js';
 import { Account } from '../../accounts/entities/account.entity.js';
@@ -54,7 +54,7 @@ export class ClaimRedemptionProvider {
     } catch (error) {
       if (error instanceof ConflictException) {
         const claimedAccount = await this.accountsRepository.findOne({
-          where: { claimTokenHash: tokenHash },
+          where: { claimTokenHash: tokenHash, deletedAt: IsNull() },
         });
         if (claimedAccount) {
           const existingClaim = await this.claimsRepository.findOne({
