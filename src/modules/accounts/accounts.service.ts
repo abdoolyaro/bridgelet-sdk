@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Account } from './entities/account.entity.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountResponseDto } from './dto/account-response.dto.js';
@@ -221,7 +221,9 @@ export class AccountsService {
   }
 
   public async findOne(id: string): Promise<AccountResponseDto> {
-    const account = await this.accountsRepository.findOne({ where: { id } });
+    const account = await this.accountsRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+    });
 
     if (!account) {
       throw new NotFoundException(`Account ${id} not found`);

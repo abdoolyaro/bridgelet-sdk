@@ -183,3 +183,31 @@ describe('CreateAccountDto — asset_issuer', () => {
     expect(errors).not.toContain('asset_issuer');
   });
 });
+
+// ─── asset_code / asset_issuer combinations ────────────────────────────────
+// asset_issuer's @ValidateIf only requires it when asset_code is set, so:
+// - asset_code alone correctly fails validation (asset_issuer required) —
+//   AccountsService.create() would otherwise fall back to `asset_code` as a
+//   bare string with no issuer.
+// - asset_issuer alone passes validation untouched (the actual gap):
+//   AccountsService.create() then falls back to `asset_code ?? 'native'`,
+//   silently dropping the issuer entirely.
+describe('CreateAccountDto — asset_code/asset_issuer combination', () => {
+  it('does not flag asset_issuer when asset_code is missing (silently dropped later)', async () => {
+    const errors = await errorsFor({
+      asset_code: undefined,
+      asset_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+    });
+    expect(errors).not.toContain('asset_issuer');
+    expect(errors).not.toContain('asset_code');
+  });
+
+  it('flags asset_issuer as required when asset_code is provided alone', async () => {
+    const errors = await errorsFor({
+      asset_code: 'USDC',
+      asset_issuer: undefined,
+    });
+    expect(errors).not.toContain('asset_code');
+    expect(errors).toContain('asset_issuer');
+  });
+});
