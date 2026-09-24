@@ -2,8 +2,9 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { CreateAccountDto } from './create-account.dto.js';
 
-// Precisely sized Stellar public keys: G + 55 uppercase alphanumeric chars = 56 total
-const VALID_KEY = 'G' + 'A'.repeat(55); // 56 chars  ✓
+// A real Ed25519 Stellar public key (valid StrKey checksum), plus
+// deliberately mis-sized variants for the length-boundary tests below.
+const VALID_KEY = 'GDV3BRGE2BXK5JMGAEDGE5QWAY2DBK5V2KEG762Y5GH4LPC5RSPRPTTJ'; // 56 chars  ✓
 const SHORT_KEY = 'G' + 'A'.repeat(54); // 55 chars  ✗
 const LONG_KEY = 'G' + 'A'.repeat(56); // 57 chars  ✗
 

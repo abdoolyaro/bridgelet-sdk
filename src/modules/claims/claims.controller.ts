@@ -61,6 +61,10 @@ export class ClaimsController {
   }
 
   @Post('redeem')
+  // Claim tokens are bearer secrets guarding on-chain fund movement, so this
+  // route gets an explicit, tighter limit than the app-wide default
+  // (ThrottlerModule.forRoot in app.module.ts) to slow brute-force guessing.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({
     summary: 'Redeem claim and sweep funds to destination wallet',
   })

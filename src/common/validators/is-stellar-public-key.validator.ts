@@ -1,6 +1,5 @@
 import { registerDecorator, ValidationOptions } from 'class-validator';
-
-const STELLAR_PUBLIC_KEY_REGEX = /^G[A-Z0-9]{55}$/;
+import { StrKey } from '@stellar/stellar-sdk';
 
 export function IsStellarPublicKey(options?: ValidationOptions) {
   return function (object: object, propertyName: string) {
@@ -9,14 +8,17 @@ export function IsStellarPublicKey(options?: ValidationOptions) {
       target: object.constructor,
       propertyName,
       options: {
-        message: `${propertyName} must be a valid Stellar public key (56 characters, starts with G, uppercase alphanumeric only)`,
+        message: `${propertyName} must be a valid Stellar public key (56 characters, starts with G, valid StrKey checksum)`,
         ...options,
       },
       validator: {
         validate(value: unknown) {
-          return (
-            typeof value === 'string' && STELLAR_PUBLIC_KEY_REGEX.test(value)
-          );
+          if (typeof value !== 'string') return false;
+          try {
+            return StrKey.isValidEd25519PublicKey(value);
+          } catch {
+            return false;
+          }
         },
       },
     });

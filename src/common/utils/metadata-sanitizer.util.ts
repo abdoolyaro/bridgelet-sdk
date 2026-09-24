@@ -4,6 +4,15 @@ import { BadRequestException } from '@nestjs/common';
 export const METADATA_MAX_BYTES = 4096;
 
 /**
+ * Keys that must never be copied onto a plain object literal, since
+ * `obj[key] = value` for these triggers Object.prototype's special
+ * accessors/inherited members instead of creating an own data property
+ * (a classic prototype-pollution vector when metadata is attacker-supplied
+ * JSON).
+ */
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
  * Keys whose values may contain PII and should be stripped before storage.
  * All comparisons are case-insensitive.
  */
@@ -46,6 +55,7 @@ export function sanitizeMetadata(
 
   const sanitised: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(metadata)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
     if (!PII_KEYS.has(key.toLowerCase())) {
       sanitised[key] = value;
     }
