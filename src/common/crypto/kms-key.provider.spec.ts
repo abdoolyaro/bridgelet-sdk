@@ -8,6 +8,7 @@ const FALLBACK_KEY = 'a'.repeat(64);
 
 const mockConfigService = {
   getOrThrow: jest.fn().mockReturnValue(FALLBACK_KEY),
+  get: jest.fn().mockReturnValue(undefined),
 };
 
 // Mock the KMS client send at module level

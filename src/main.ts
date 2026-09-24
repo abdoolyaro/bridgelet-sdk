@@ -7,8 +7,8 @@ import { PinoLoggerService } from './common/logger/pino-logger.service.js';
 import appConfig from './config/app.config.js';
 
 async function bootstrap() {
-  const config = appConfig();
-  const isProduction = config.env === 'production';
+  const appCfg = appConfig();
+  const isProduction = appCfg.env === 'production';
   const logger = isProduction ? new PinoLoggerService() : undefined;
   const app = await NestFactory.create(AppModule, { logger });
 
@@ -21,7 +21,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: config.corsOrigins,
+    origin: appCfg.corsOrigins,
     credentials: true,
   });
 
@@ -34,7 +34,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = config.port;
+  const port = appCfg.port;
   void app.listen(port);
 
   const bootstrapLogger = new Logger('Bootstrap');
