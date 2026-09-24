@@ -38,9 +38,7 @@ import { CryptoModule } from './common/crypto/crypto.module.js';
       useFactory: () => databaseConfig().database,
     }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([
-      { ttl: 60000, limit: appConfig().apiRateLimit },
-    ]),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: appConfig().apiRateLimit }]),
     AccountsModule,
     ClaimsModule,
     SweepsModule,
