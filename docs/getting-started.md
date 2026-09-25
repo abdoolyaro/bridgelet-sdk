@@ -6,7 +6,10 @@ changes going forward since Markdown is easier to review and search.
 ## Prerequisites
 
 - Node.js 18+
-- PostgreSQL running locally (or reachable) with a database created
+- PostgreSQL running locally (or reachable) with a database created —
+  or run `docker compose up` from the repo root instead, which
+  provisions Postgres and runs migrations for you (see
+  `CONTRIBUTING.md`)
 - A Stellar testnet funding account (secret key)
 
 ## Setup
